@@ -1,0 +1,91 @@
+#pragma version ^0.4.0;
+
+;; Imports
+#include "stdlib.fc";
+
+;; Global storage variables
+global int total_supply;
+global int circulating_supply;
+
+;; Token Precision Constants
+const int TOKEN_DECIMALS = 9;  ;; 9 decimal places of precision
+const int TOKEN_PRECISION = 1000000000;  ;; 10^9
+const int INITIAL_SUPPLY = 1000000000000000;  ;; 1B tokens
+
+;; Storage scheme
+(slice, int, int, cell) load_data() {
+    var ds = get_data().begin_parse();
+    return (
+        ds~load_msg_addr(),     ;; owner address
+        ds~load_uint(256),      ;; total supply
+        ds~load_uint(256),      ;; circulating supply
+        ds~load_ref()           ;; balances dict
+    );
+}
+
+;; Save contract data
+() save_data(slice owner, int total_supply, int circulating_supply, cell balances) impure {
+    set_data(begin_cell()
+        .store_slice(owner)
+        .store_uint(total_supply, 256)
+        .store_uint(circulating_supply, 256)
+        .store_ref(balances)
+    .end_cell());
+}
+
+;; Get total supply
+int get_total_supply() method_id {
+    var (_, total_supply, _, _) = load_data();
+    return total_supply;
+}
+
+;; Get circulating supply
+int get_circulating_supply() method_id {
+    var (_, _, circulating_supply, _) = load_data();
+    return circulating_supply;
+}
+
+;; Transfer tokens
+() transfer_tokens(slice sender, slice recipient, int amount) impure {
+
+}
+
+;; Mint new tokens
+() mint_tokens(slice minter, int amount) impure {
+
+}
+
+;; Burn tokens, reducing total supply
+() burn_tokens(slice burner, int amount) impure {
+
+}
+
+;; Initialize the contract
+() recv_internal(int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    var cs = in_msg_full.begin_parse();
+    var flags = cs~load_uint(4);
+
+    ;; Ignore bounced messages
+    if (flags & 1) {
+        return ();
+    }
+
+    int op = in_msg_body~load_uint(32);
+
+    if (op == 1) { ;; Mint tokens
+        slice minter = cs~load_msg_addr();
+        int amount = in_msg_body~load_uint(256);
+        mint_tokens(minter, amount);
+    }
+    elseif (op == 2) { ;; Transfer tokens
+        slice sender = cs~load_msg_addr();
+        slice recipient = in_msg_body~load_msg_addr();
+        int amount = in_msg_body~load_uint(256);
+        transfer_tokens(sender, recipient, amount);
+    }
+    elseif (op == 3) { ;; Burn tokens
+        slice burner = cs~load_msg_addr();
+        int amount = in_msg_body~load_uint(256);
+        burn_tokens(burner, amount);
+    }
+}
