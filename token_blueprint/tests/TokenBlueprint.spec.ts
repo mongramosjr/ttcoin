@@ -1,5 +1,5 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { Cell, toNano } from '@ton/core';
+import {Address, Cell, toNano} from '@ton/core';
 import { TokenBlueprint } from '../wrappers/TokenBlueprint';
 import '@ton/test-utils';
 import { compile } from '@ton/blueprint';
@@ -12,28 +12,31 @@ describe('TokenBlueprint', () => {
     });
 
     let blockchain: Blockchain;
-    let deployer: SandboxContract<TreasuryContract>;
+    let initWallet: SandboxContract<TreasuryContract>;
+    let deployerWallet: SandboxContract<TreasuryContract>;
     let tokenBlueprint: SandboxContract<TokenBlueprint>;
 
     beforeEach(async () => {
         blockchain = await Blockchain.create();
+        initWallet = await blockchain.treasury('initWallet');
+        deployerWallet = await blockchain.treasury('deployerWallet');
 
         tokenBlueprint = blockchain.openContract(
             TokenBlueprint.createFromConfig(
                 {
                     id: 0,
                     counter: 0,
+                    address: initWallet.address,
+                    owner_address: deployerWallet.address,
                 },
                 code
             )
         );
 
-        deployer = await blockchain.treasury('deployer');
-
-        const deployResult = await tokenBlueprint.sendDeploy(deployer.getSender(), toNano('0.05'));
+        const deployResult = await tokenBlueprint.sendDeploy(deployerWallet.getSender(), toNano('0.05'));
 
         expect(deployResult.transactions).toHaveTransaction({
-            from: deployer.address,
+            from: deployerWallet.address,
             to: tokenBlueprint.address,
             deploy: true,
             success: true,

@@ -1,30 +1,43 @@
 #include "imports/stdlib.fc";
 
 const op::increase = "op::increase"c; ;; create an opcode from string using the "c" prefix, this results in 0x7e8764ef opcode in this case
+const op::withdraw = "op::withdraw"c;
+const op::deposit = "op::deposit"c;
 
 ;; storage variables
+const const::min_tons_for_storage = 4000000000; ;; 4 TON
 
 ;; id is required to be able to create different instances of counters
 ;; since addresses in TON depend on the initial state of the contract
 global int ctx_id;
 global int ctx_counter;
+global slice recent_sender_address;
 
 ;; load_data populates storage variables using stored data
-() load_data() impure {
-    var ds = get_data().begin_parse();
+(int, slice, slice) load_data() impure inline {
 
+    var ds = get_data().begin_parse();
     ctx_id = ds~load_uint(32);
     ctx_counter = ds~load_uint(32);
-
+    recent_sender_address = ds~load_msg_addr();         ;; the most recent sender
+    slice owner_address = ds~load_msg_addr();           ;; owner_address
     ds.end_parse();
+
+    return (
+        ctx_counter,
+        recent_sender_address,
+        owner_address
+    );
 }
 
 ;; save_data stores storage variables as a cell into persistent storage
-() save_data() impure {
+() save_data(int counter_value, slice recent_sender, slice owner_address) impure inline {
     set_data(
         begin_cell()
             .store_uint(ctx_id, 32)
-            .store_uint(ctx_counter, 32)
+            .store_uint(counter_value, 32)
+            .store_slice(recent_sender) ;; the most recent sender
+            .store_slice(owner_address) ;; owner_address
             .end_cell()
     );
 }
@@ -37,20 +50,44 @@ global int ctx_counter;
 
     slice cs = in_msg_full.begin_parse();
     int flags = cs~load_uint(4);
+    slice sender_address = cs~load_msg_addr();
+
     if (flags & 1) { ;; ignore all bounced messages
         return ();
     }
 
-    load_data(); ;; here we populate the storage variables
+    var (counter_value, recent_sender, owner_address) = load_data(); ;; here we populate the storage variables
 
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
     int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
     if (op == op::increase) {
         int increase_by = in_msg_body~load_uint(32);
-        ctx_counter += increase_by;
-        save_data();
+        counter_value += increase_by;
+        save_data(counter_value, sender_address, owner_address);
         return ();
+    }
+
+    if (op == op::withdraw) {
+        throw_unless(103, equal_slices_bits(sender_address, owner_address));
+
+        int withdraw_amount = in_msg_body~load_coins();
+        var [balance, _] = get_balance();
+        throw_unless(104, balance >= withdraw_amount);
+
+        int return_value = min(withdraw_amount, balance - const::min_tons_for_storage);
+
+        int msg_mode = 1; ;; 0 (Ordinary message) + 1 (Pay transfer fees separately from the message value)
+
+        var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(sender_address)
+            .store_coins(return_value)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+
+        send_raw_message(msg.end_cell(), msg_mode);
+
+        return();
     }
 
     throw(0xffff); ;; if the message contains an op that is not known to this contract, we throw
@@ -61,11 +98,25 @@ global int ctx_counter;
 ;; note that unlike in many other smart contract VMs, get methods cannot be called by other contracts
 
 int get_counter() method_id {
-    load_data();
-    return ctx_counter;
+    var (counter_value, _, _) = load_data();
+    return counter_value;
 }
 
 int get_id() method_id {
     load_data();
     return ctx_id;
+}
+
+(int, slice, slice) get_contract_storage_data() method_id {
+    var (counter_value, recent_sender, owner_address) = load_data();
+    return (
+        counter_value,
+        recent_sender,
+        owner_address
+    );
+}
+
+int balance() method_id {
+    var [balance, _] = get_balance();
+    return balance;
 }

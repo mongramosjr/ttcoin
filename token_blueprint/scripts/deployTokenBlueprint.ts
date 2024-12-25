@@ -1,4 +1,4 @@
-import { toNano } from '@ton/core';
+import { address, toNano } from '@ton/core';
 import { TokenBlueprint } from '../wrappers/TokenBlueprint';
 import { compile, NetworkProvider } from '@ton/blueprint';
 
@@ -8,6 +8,8 @@ export async function run(provider: NetworkProvider) {
             {
                 id: Math.floor(Math.random() * 10000),
                 counter: 0,
+                address: address("0QAJpP-ZAUCmV4ZIM4873mBK9Q7WFQEVwk4kNLPv6m2lxRBg"),
+                owner_address: address("0QAJpP-ZAUCmV4ZIM4873mBK9Q7WFQEVwk4kNLPv6m2lxRBg"),
             },
             await compile('TokenBlueprint')
         )

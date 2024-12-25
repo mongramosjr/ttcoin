@@ -3,10 +3,17 @@ import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, 
 export type TokenBlueprintConfig = {
     id: number;
     counter: number;
+    address: Address;
+    owner_address: Address;
 };
 
 export function tokenBlueprintConfigToCell(config: TokenBlueprintConfig): Cell {
-    return beginCell().storeUint(config.id, 32).storeUint(config.counter, 32).endCell();
+    return beginCell()
+        .storeUint(config.id, 32)
+        .storeUint(config.counter, 32)
+        .storeAddress(config.address)
+        .storeAddress(config.owner_address)
+        .endCell();
 }
 
 export const Opcodes = {
@@ -43,14 +50,15 @@ export class TokenBlueprint implements Contract {
             queryID?: number;
         }
     ) {
-        await provider.internal(via, {
-            value: opts.value,
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
+        const msg_body = beginCell()
                 .storeUint(Opcodes.increase, 32)
                 .storeUint(opts.queryID ?? 0, 64)
                 .storeUint(opts.increaseBy, 32)
-                .endCell(),
+                .endCell();
+        await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: msg_body,
         });
     }
 
