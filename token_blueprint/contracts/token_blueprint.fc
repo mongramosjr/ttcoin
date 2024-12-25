@@ -59,13 +59,17 @@ global slice recent_sender_address;
     var (counter_value, recent_sender, owner_address) = load_data(); ;; here we populate the storage variables
 
     int op = in_msg_body~load_uint(32); ;; by convention, the first 32 bits of incoming message is the op
-    int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
 
     if (op == op::increase) {
+        int query_id = in_msg_body~load_uint(64); ;; also by convention, the next 64 bits contain the "query id", although this is not always the case
         int increase_by = in_msg_body~load_uint(32);
         counter_value += increase_by;
         save_data(counter_value, sender_address, owner_address);
         return ();
+    }
+
+    if (op == op::deposit) {
+        return();
     }
 
     if (op == op::withdraw) {
