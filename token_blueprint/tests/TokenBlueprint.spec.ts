@@ -81,4 +81,108 @@ describe('TokenBlueprint', () => {
             expect(counterAfter).toBe(counterBefore + increaseBy);
         }
     });
+
+    it("successfully deposits funds", async () => {
+
+        const balanceRequest_old = await tokenBlueprint.getBalance();
+
+        console.log('balance is ', balanceRequest_old.number);
+        console.log(' deposit amount is ', toNano("5"))
+
+        const senderWallet = await blockchain.treasury("sender");
+
+        const depositMessageResult = await tokenBlueprint.sendDeposit(
+            senderWallet.getSender(),
+            toNano("5")
+        );
+
+        expect(depositMessageResult.transactions).toHaveTransaction({
+            from: senderWallet.address,
+            to: tokenBlueprint.address,
+            success: true,
+        });
+
+        const balanceRequest = await tokenBlueprint.getBalance();
+
+        console.log('new balance is ', balanceRequest.number);
+
+        expect(toNano(balanceRequest.number)).toBeGreaterThan(toNano("4.99"));
+    });
+
+    it("should return deposit funds as no command is sent", async () => {
+        const balanceRequest_old = await tokenBlueprint.getBalance();
+        console.log('balance is ', balanceRequest_old.number);
+
+        const senderWallet = await blockchain.treasury("sender");
+
+        const depositMessageResult = await tokenBlueprint.sendNoCodeDeposit(
+            senderWallet.getSender(),
+            toNano("0")
+        );
+
+        expect(depositMessageResult.transactions).toHaveTransaction({
+            from: senderWallet.address,
+            to: tokenBlueprint.address,
+            success: false,
+        });
+
+        const balanceRequest = await tokenBlueprint.getBalance();
+        console.log('new balance is ', balanceRequest.number);
+
+        expect(balanceRequest.number).toBe(balanceRequest_old.number);
+    });
+
+    it("successfully withdraws funds on behalf of owner", async () => {
+        const senderWallet = await blockchain.treasury("sender");
+
+        await tokenBlueprint.sendDeposit(senderWallet.getSender(), toNano("5"));
+
+        const withdrawalRequestResult = await tokenBlueprint.sendWithdrawalRequest(
+            deployerWallet.getSender(),
+            toNano("0.05"),
+            toNano("1")
+        );
+
+        expect(withdrawalRequestResult.transactions).toHaveTransaction({
+            from: tokenBlueprint.address,
+            to: deployerWallet.address,
+            success: true,
+            value: toNano(1),
+        });
+    });
+
+    it("fails to withdraw funds on behalf of not-owner", async () => {
+        const senderWallet = await blockchain.treasury("sender");
+
+        await tokenBlueprint.sendDeposit(senderWallet.getSender(), toNano("5"));
+
+        const withdrawalRequestResult = await tokenBlueprint.sendWithdrawalRequest(
+            senderWallet.getSender(),
+            toNano("0.5"),
+            toNano("1")
+        );
+
+        expect(withdrawalRequestResult.transactions).toHaveTransaction({
+            from: senderWallet.address,
+            to: tokenBlueprint.address,
+            success: false,
+            exitCode: 103,
+        });
+    });
+
+    it("fails to withdraw funds because lack of balance", async () => {
+        const withdrawalRequestResult = await tokenBlueprint.sendWithdrawalRequest(
+            deployerWallet.getSender(),
+            toNano("0.5"),
+            toNano("1")
+        );
+
+        expect(withdrawalRequestResult.transactions).toHaveTransaction({
+            from: deployerWallet.address,
+            to: tokenBlueprint.address,
+            success: false,
+            exitCode: 104,
+        });
+    });
+
 });
